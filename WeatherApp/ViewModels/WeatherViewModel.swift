@@ -48,31 +48,25 @@ final class WeatherViewModel: WeatherViewModelProtocol {
 
         Task {
             do {
-                // 1) Загружаем текущую погоду
                 let current = try await weatherService.fetchCurrentWeather(for: coordinates)
                 onWeatherUpdate?(current)
 
-                // 2) Загружаем прогноз
                 let forecast = try await weatherService.fetchForecast(for: coordinates)
                 let hours = filterHours(from: forecast, using: current.location.localtime)
                 onHourlyUpdate?(hours)
 
-                // 3) Формируем трёхдневный прогноз: сегодня, завтра, послезавтра
                 let todayString = String(current.location.localtime.prefix(10)) // "YYYY-MM-DD"
                 let allDays = forecast.forecast.forecastday
-                // Оставляем только дни начиная с сегодняшнего
                 let upcoming = allDays.filter { $0.date >= todayString }
-                // Берём ровно три дня
                 let threeDays = Array(upcoming.prefix(3))
                 onDailyUpdate?(threeDays)
 
             } catch {
-                // 4) Обработка ошибок
                 let message: String
                 if let urlError = error as? URLError, urlError.code == .notConnectedToInternet {
                     message = "Интернет недоступен. Проверьте соединение и нажмите «Повторить»."
                 } else {
-                    message = "Ошибка загрузки погоды. Попробуйте позже."
+                    message = "Подключитесь к сети и нажмите Повторить"
                 }
                 onError?(message)
             }

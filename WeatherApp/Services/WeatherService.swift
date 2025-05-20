@@ -23,29 +23,31 @@ final class WeatherService: WeatherServiceProtocol {
     private let apiKey = "fa8b3df74d4042b9aa7135114252304"
     private let baseURL = "https://api.weatherapi.com/v1"
     
-//Запрашиваем текущую погоду для заданных координат
     func fetchCurrentWeather(for location: CLLocationCoordinate2D) async throws -> CurrentWeatherResponse {
         let urlString = "\(baseURL)/current.json?key=\(apiKey)&q=\(location.latitude),\(location.longitude)&lang=ru"
         guard let url = URL(string: urlString) else {
             throw WeatherServiceError.invalidURL
         }
 
-        // Выполняем сетевой запрос
-        let (data, response) = try await URLSession.shared.data(from: url)
+        // 1) Создаём запрос с таймаутом
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 3
 
-        // Проверяем HTTP-статус
+        // 2) Выполняем запрос
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        // 3) Проверяем HTTP-статус
         guard let httpResponse = response as? HTTPURLResponse else {
             throw WeatherServiceError.requestFailed
         }
-        guard 200..<300 ~= httpResponse.statusCode else {
+        guard (200..<300).contains(httpResponse.statusCode) else {
             throw WeatherServiceError.serverError(httpResponse.statusCode)
         }
 
-        // Декодим
+        // 4) Декодим
         let decoder = JSONDecoder()
         do {
-            let weather = try decoder.decode(CurrentWeatherResponse.self, from: data)
-            return weather
+            return try decoder.decode(CurrentWeatherResponse.self, from: data)
         } catch {
             throw WeatherServiceError.decodingFailed
         }
@@ -55,7 +57,6 @@ final class WeatherService: WeatherServiceProtocol {
 }
 
 extension WeatherService {
-    //Запрашиваем прогноз погоды на 7 дней для заданных координат
     
     func fetchForecast(for location: CLLocationCoordinate2D) async throws -> ForecastResponse {
         let urlString = "\(baseURL)/forecast.json?key=\(apiKey)&q=\(location.latitude),\(location.longitude)&days=7&lang=ru"
@@ -63,18 +64,21 @@ extension WeatherService {
             throw WeatherServiceError.invalidURL
         }
 
-        let (data, response) = try await URLSession.shared.data(from: url)
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 3
+        
+
+        let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw WeatherServiceError.requestFailed
         }
-        guard 200..<300 ~= http.statusCode else {
+        guard (200..<300).contains(http.statusCode) else {
             throw WeatherServiceError.serverError(http.statusCode)
         }
 
         let decoder = JSONDecoder()
         do {
-            let forecast = try decoder.decode(ForecastResponse.self, from: data)
-            return forecast
+            return try decoder.decode(ForecastResponse.self, from: data)
         } catch {
             throw WeatherServiceError.decodingFailed
         }
