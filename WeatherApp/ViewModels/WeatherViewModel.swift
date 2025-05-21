@@ -41,35 +41,38 @@ final class WeatherViewModel: WeatherViewModelProtocol {
         LocationManager.shared.requestLocation()
     }
     
-    
     func loadWeather(for coordinates: CLLocationCoordinate2D) {
         lastCoordinates = coordinates
         onLoadingChanged?(true)
 
         Task {
             do {
+                // 1) Текущая погода
                 let current = try await weatherService.fetchCurrentWeather(for: coordinates)
                 onWeatherUpdate?(current)
 
+                // 2) Почасовой прогноз
                 let forecast = try await weatherService.fetchForecast(for: coordinates)
                 let hours = filterHours(from: forecast, using: current.location.localtime)
                 onHourlyUpdate?(hours)
 
-                let todayString = String(current.location.localtime.prefix(10)) // "YYYY-MM-DD"
+                // 3) Трёхдневный прогноз: Сегодня, Завтра, Послезавтра
                 let allDays = forecast.forecast.forecastday
-                let upcoming = allDays.filter { $0.date >= todayString }
-                let threeDays = Array(upcoming.prefix(3))
+                let threeDays = nextThreeDays(from: allDays)
                 onDailyUpdate?(threeDays)
 
             } catch {
+                // Обработка ошибок сети и других случаев
                 let message: String
                 if let urlError = error as? URLError, urlError.code == .notConnectedToInternet {
                     message = "Интернет недоступен. Проверьте соединение и нажмите «Повторить»."
                 } else {
-                    message = "Подключитесь к сети и нажмите Повторить"
+                    message = "Ошибка загрузки. Попробуйте снова."
                 }
                 onError?(message)
             }
+
+            // Скрываем индикатор загрузки
             onLoadingChanged?(false)
         }
     }
@@ -126,6 +129,30 @@ final class WeatherViewModel: WeatherViewModelProtocol {
         }
         
         return result
+    }
+    
+    /// Возвращает ровно три прогноза: сегодня, завтра и послезавтра
+    private func nextThreeDays(from allDays: [ForecastDay]) -> [ForecastDay] {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.locale = Locale(identifier: "ru_RU_POSIX")
+
+        // 1) Начало текущего дня
+        let today = Calendar.current.startOfDay(for: Date())
+
+        // 2) Преобразуем в массив (ForecastDay, Date)
+        let pairs: [(ForecastDay, Date)] = allDays.compactMap { day in
+            guard let d = formatter.date(from: day.date) else { return nil }
+            return (day, Calendar.current.startOfDay(for: d))
+        }
+
+        // 3) Фильтруем всё, что не раньше сегодня, и сортируем
+        let filtered = pairs
+          .filter { $0.1 >= today }
+          .sorted { $0.1 < $1.1 }
+
+        // 4) Берём первые 3 и возвращаем модели
+        return filtered.prefix(3).map { $0.0 }
     }
 }
 
